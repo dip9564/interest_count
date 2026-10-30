@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
 
 const status = document.getElementById("authStatus");
@@ -14,10 +14,42 @@ if (!isFirebaseConfigured) {
     const auth = getAuth(app);
     const db = getFirestore(app);
     let unsubscribeInvestments = null;
+    let unsubscribeFinance = null;
+    let unsubscribeSpends = null;
     let currentUser = null;
+    let currentBalances = { bank: 0, cash: 0, invested: 0 };
+    let currentSpends = [];
 
     const investmentsRef = () => collection(db, "users", currentUser.uid, "investments");
+    const financeRef = () => doc(db, "users", currentUser.uid, "finance", "summary");
+    const spendsRef = () => collection(db, "users", currentUser.uid, "spends");
     window.cloud = {
+      async saveBalances(balances) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        await setDoc(financeRef(), balances);
+      },
+      async addSpend(spend) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        const { id, ...data } = spend;
+        await setDoc(doc(db, "users", currentUser.uid, "spends", String(id)), data);
+      },
+      async deleteSpend(id) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        await deleteDoc(doc(db, "users", currentUser.uid, "spends", String(id)));
+      },
+      async replaceSpends(items) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (items.length > 450) throw new Error("A maximum of 450 planned spends can be imported at once.");
+        const existing = await getDocs(spendsRef());
+        if (existing.size + items.length > 500) throw new Error("This import exceeds Firestore's 500-operation batch limit.");
+        const batch = writeBatch(db);
+        existing.forEach(snapshot => batch.delete(snapshot.ref));
+        items.forEach(item => {
+          const { id, ...data } = item;
+          batch.set(doc(db, "users", currentUser.uid, "spends", String(id)), data);
+        });
+        if (existing.size + items.length) await batch.commit();
+      },
       async replaceAll(items) {
         if (!currentUser) throw new Error("Please sign in first.");
         if (items.length > 450) throw new Error("A maximum of 450 investments can be saved at once.");
@@ -71,15 +103,28 @@ if (!isFirebaseConfigured) {
     onAuthStateChanged(auth, user => {
       currentUser = user;
       if (unsubscribeInvestments) { unsubscribeInvestments(); unsubscribeInvestments = null; }
+      if (unsubscribeFinance) { unsubscribeFinance(); unsubscribeFinance = null; }
+      if (unsubscribeSpends) { unsubscribeSpends(); unsubscribeSpends = null; }
       document.body.classList.toggle("signed-out", !user);
       document.getElementById("authPanel").classList.toggle("hidden", !!user);
       document.getElementById("accountEmail").textContent = user?.email || "";
       if (!user) {
         window.setCloudInvestments([]);
+        currentBalances = { bank: 0, cash: 0, invested: 0 };
+        currentSpends = [];
+        window.setFinanceData(currentBalances, currentSpends);
         setStatus("Sign in to load your cloud-saved investments.");
         return;
       }
       setStatus("Connected. Loading your investments…");
+      unsubscribeFinance = onSnapshot(financeRef(), snapshot => {
+        currentBalances = snapshot.exists() ? snapshot.data() : { bank: 0, cash: 0, invested: 0 };
+        window.setFinanceData(currentBalances, currentSpends);
+      }, error => setStatus(`Could not load balances: ${error.message}`));
+      unsubscribeSpends = onSnapshot(spendsRef(), snapshot => {
+        currentSpends = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+        window.setFinanceData(currentBalances, currentSpends);
+      }, error => setStatus(`Could not load planned spends: ${error.message}`));
       unsubscribeInvestments = onSnapshot(investmentsRef(), async snapshot => {
         const records = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
         window.setCloudInvestments(records);
