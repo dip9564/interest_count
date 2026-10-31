@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
 
 const status = document.getElementById("authStatus");
@@ -44,6 +44,116 @@ if (!isFirebaseConfigured) {
       async deleteSpend(id) {
         if (!currentUser) throw new Error("Please sign in first.");
         await deleteDoc(doc(db, "users", currentUser.uid, "spends", String(id)));
+      },
+      async payPlannedSpend(id, source, investedTotal) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (source !== "bank" && source !== "cash") throw new Error("Choose a bank account or available cash.");
+        const spendDoc = doc(db, "users", currentUser.uid, "spends", String(id));
+        const historyId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const historyDoc = doc(db, "users", currentUser.uid, "balanceHistory", historyId);
+        const changedAt = new Date().toISOString();
+        return runTransaction(db, async transaction => {
+          const spendSnapshot = await transaction.get(spendDoc);
+          const financeSnapshot = await transaction.get(financeRef());
+          if (!spendSnapshot.exists()) throw new Error("This planned spend was already removed or paid.");
+          const spend = spendSnapshot.data();
+          const amount = Number(spend.amount);
+          if (!Number.isFinite(amount) || amount <= 0) throw new Error("This planned spend has an invalid amount.");
+          const saved = financeSnapshot.exists() ? financeSnapshot.data() : {};
+          const previous = {
+            bank: Number(saved.bank) || 0,
+            cash: Number(saved.cash) || 0,
+            invested: Number(investedTotal) || 0,
+            roundUpDays: Number(saved.roundUpDays) || 15
+          };
+          if (previous[source] < amount) throw new Error(`Not enough money in ${source === "bank" ? "your bank account" : "available cash"}.`);
+          const next = { ...previous, [source]: Number((previous[source] - amount).toFixed(2)) };
+          const previousTotal = previous.bank + previous.cash + previous.invested;
+          const newTotal = next.bank + next.cash + next.invested;
+          const previousUsable = previous.bank + previous.cash;
+          const newUsable = next.bank + next.cash;
+          const historyEntry = {
+            changedAt,
+            previousTotal,
+            totalChange: newTotal - previousTotal,
+            newTotal,
+            previousBank: previous.bank,
+            newBank: next.bank,
+            previousCash: previous.cash,
+            newCash: next.cash,
+            previousUsable,
+            usableChange: newUsable - previousUsable,
+            newUsable,
+            previousInvested: previous.invested,
+            investedChange: 0,
+            newInvested: next.invested,
+            note: `Paid planned spend: ${String(spend.name || "Expense")}`
+          };
+          transaction.set(financeRef(), next);
+          transaction.delete(spendDoc);
+          transaction.set(historyDoc, historyEntry);
+          return { balances: next, historyEntry: { id: historyId, ...historyEntry }, spendName: spend.name || "Expense", amount };
+        });
+      },
+      async completeInvestment(id, payoutAmount, source, completedDate, investedTotal) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (source !== "bank" && source !== "cash") throw new Error("Choose a bank account or available cash.");
+        const investmentDoc = doc(db, "users", currentUser.uid, "investments", String(id));
+        const historyId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const historyDoc = doc(db, "users", currentUser.uid, "balanceHistory", historyId);
+        const changedAt = new Date().toISOString();
+        return runTransaction(db, async transaction => {
+          const investmentSnapshot = await transaction.get(investmentDoc);
+          const financeSnapshot = await transaction.get(financeRef());
+          if (!investmentSnapshot.exists()) throw new Error("This investment no longer exists.");
+          const investment = investmentSnapshot.data();
+          if (investment.completed_at) throw new Error("This investment is already complete.");
+          const payout = Number(payoutAmount);
+          if (!Number.isFinite(payout) || payout < 0) throw new Error("Enter a valid payout amount.");
+          const saved = financeSnapshot.exists() ? financeSnapshot.data() : {};
+          const previous = {
+            bank: Number(saved.bank) || 0,
+            cash: Number(saved.cash) || 0,
+            invested: Number(investedTotal) || 0,
+            roundUpDays: Number(saved.roundUpDays) || 15
+          };
+          const newInvested = Math.max(0, previous.invested - (Number(investment.amount) || 0));
+          const next = { ...previous, [source]: Number((previous[source] + payout).toFixed(2)), invested: newInvested };
+          const principal = Number(investment.amount) || 0;
+          const previousTotal = previous.bank + previous.cash + previous.invested;
+          const newTotal = next.bank + next.cash + next.invested;
+          const previousUsable = previous.bank + previous.cash;
+          const newUsable = next.bank + next.cash;
+          const historyEntry = {
+            changedAt,
+            previousTotal,
+            totalChange: newTotal - previousTotal,
+            newTotal,
+            previousBank: previous.bank,
+            newBank: next.bank,
+            previousCash: previous.cash,
+            newCash: next.cash,
+            previousUsable,
+            usableChange: newUsable - previousUsable,
+            newUsable,
+            previousInvested: previous.invested,
+            investedChange: newInvested - previous.invested,
+            newInvested,
+            note: `Completed investment: ${String(investment.name || "Investment")}`
+          };
+          const completedAt = /^\d{4}-\d{2}-\d{2}$/.test(completedDate || "") ? completedDate : changedAt.slice(0, 10);
+          transaction.update(investmentDoc, { completed_at: completedAt, received_amount: payout });
+          transaction.set(financeRef(), next);
+          transaction.set(historyDoc, historyEntry);
+          return {
+            balances: next,
+            historyEntry: { id: historyId, ...historyEntry },
+            investment: { id: String(id), ...investment, completed_at: completedAt, received_amount: payout },
+            payout,
+            principal,
+            source
+          };
+        });
       },
       async deleteBalanceHistory(id) {
         if (!currentUser) throw new Error("Please sign in first.");
