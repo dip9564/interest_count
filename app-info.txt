@@ -1,0 +1,38 @@
+# What Yield does
+Yield is a personal finance tracker for recording balances, planned expenses, expected income, and simple-interest investments. It helps you understand how your money changes over time.
+
+# Money & spends
+- Money overview shows total money, usable money, invested cash, and planned spends.
+- Your balances tracks your bank account and available cash. Invested cash is calculated from active investments.
+- Edit balances records manual balance changes in History. Money transfer moves an amount between bank and cash without changing total money.
+- Planned spends are future bills or expenses. Add a due date to see when you expect to use the money; overdue items are marked expired until you remove or pay them.
+- Repeated spends can be set to repeat after a chosen number of days. Editing lets you change the name, amount, date, or repeat interval.
+- Pay records the spend and deducts it from either your bank account or available cash.
+
+# Expected money
+- Add payments you expect to receive, with an expected date and optional note.
+- Upcoming or overdue expected payments remain estimates until you mark them received.
+- Mark received, choose bank or available cash, and Yield adds the payment to that balance and records the change in History.
+
+# Investments
+- Add an investment with its name, start date, principal, monthly simple-interest rate, and optional note.
+- Choose bank account or available cash as the funding source to deduct the principal from that balance. Choose other when the money came from outside those tracked balances.
+- Investment summaries show principal, interest earned, current value, and estimated monthly interest.
+- Complete an investment by entering the amount received and choosing where to deposit it. The investment is then moved to completed history.
+- Interest settings control the day threshold used to count an extra month when the remaining days qualify.
+
+# Manual calculator
+- Compare simple and compound interest by entering principal, monthly rate, start date, and calculation date.
+- Save to My Investments is available for simple-interest calculations and carries the calculated details into the investment form. Add an investment name and optional note before saving.
+
+# History
+- Balance changes is the default history view. It includes a month-by-month cash-flow chart and individual balance records.
+- Completed investments shows investments you have marked complete.
+- History colors help distinguish investment activity, expected income, and spend payments.
+
+# Backups and account
+- Export backup downloads a copy of your tracked data. Import backup restores data from a backup file and replaces the current cloud data after confirmation.
+- The app uses your signed-in account to sync supported data through Firebase. Keep backup files somewhere private and secure.
+
+# Developer
+Yield is developed by Dip Mondal.
