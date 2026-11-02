@@ -41,6 +41,16 @@ if (!isFirebaseConfigured) {
       },
       async addSpend(spend) {
         if (!currentUser) throw new Error("Please sign in first.");
+        const repeatDays = Number(spend.repeatDays) || 0;
+        if (repeatDays && (!Number.isInteger(repeatDays) || repeatDays < 1 || repeatDays > 3650 || !/^\d{4}-\d{2}-\d{2}$/.test(spend.dueDate || ""))) throw new Error("Recurring spends need a valid interval and expected use date.");
+        const { id, ...data } = spend;
+        await setDoc(doc(db, "users", currentUser.uid, "spends", String(id)), data);
+      },
+      async updateSpend(spend) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        const repeatDays = Number(spend.repeatDays) || 0;
+        if (!spend.name?.trim() || !Number.isFinite(Number(spend.amount)) || Number(spend.amount) <= 0) throw new Error("Enter a name and a valid amount.");
+        if (repeatDays && (!Number.isInteger(repeatDays) || repeatDays < 1 || repeatDays > 3650 || !/^\d{4}-\d{2}-\d{2}$/.test(spend.dueDate || ""))) throw new Error("Recurring spends need a valid interval and expected use date.");
         const { id, ...data } = spend;
         await setDoc(doc(db, "users", currentUser.uid, "spends", String(id)), data);
       },
@@ -202,9 +212,22 @@ if (!isFirebaseConfigured) {
             note: `Paid planned spend: ${String(spend.name || "Expense")}`
           };
           transaction.set(financeRef(), next);
-          transaction.delete(spendDoc);
+          const repeatDays = Number(spend.repeatDays) || 0;
+          let nextDueDate = "";
+          if (Number.isInteger(repeatDays) && repeatDays > 0) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(spend.dueDate || "")) throw new Error("This recurring spend needs a valid expected use date.");
+            const [year, month, day] = spend.dueDate.split("-").map(Number);
+            const scheduled = new Date(Date.UTC(year, month - 1, day));
+            const today = new Date();
+            const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+            do { scheduled.setUTCDate(scheduled.getUTCDate() + repeatDays); } while (scheduled.getTime() <= todayUtc);
+            nextDueDate = scheduled.toISOString().slice(0, 10);
+            transaction.update(spendDoc, { dueDate: nextDueDate });
+          } else {
+            transaction.delete(spendDoc);
+          }
           transaction.set(historyDoc, historyEntry);
-          return { balances: next, historyEntry: { id: historyId, ...historyEntry }, spendName: spend.name || "Expense", amount };
+          return { balances: next, historyEntry: { id: historyId, ...historyEntry }, spendName: spend.name || "Expense", amount, recurring: repeatDays > 0, nextDueDate, repeatDays };
         });
       },
       async completeInvestment(id, payoutAmount, source, completedDate, investedTotal) {
