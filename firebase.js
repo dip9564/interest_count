@@ -17,14 +17,17 @@ if (!isFirebaseConfigured) {
     let unsubscribeFinance = null;
     let unsubscribeSpends = null;
     let unsubscribeBalanceHistory = null;
+    let unsubscribeExpectedMoney = null;
     let currentUser = null;
     let currentBalances = { bank: 0, cash: 0, invested: 0 };
     let currentSpends = [];
+    let currentExpectedMoney = [];
 
     const investmentsRef = () => collection(db, "users", currentUser.uid, "investments");
     const financeRef = () => doc(db, "users", currentUser.uid, "finance", "summary");
     const spendsRef = () => collection(db, "users", currentUser.uid, "spends");
     const balanceHistoryRef = () => collection(db, "users", currentUser.uid, "balanceHistory");
+    const expectedMoneyRef = () => collection(db, "users", currentUser.uid, "expectedMoney");
     window.cloud = {
       async saveBalances(balances, historyEntry = null) {
         if (!currentUser) throw new Error("Please sign in first.");
@@ -44,6 +47,115 @@ if (!isFirebaseConfigured) {
       async deleteSpend(id) {
         if (!currentUser) throw new Error("Please sign in first.");
         await deleteDoc(doc(db, "users", currentUser.uid, "spends", String(id)));
+      },
+      async transferBalances(direction, amount, investedTotal) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (direction !== "bank-to-cash" && direction !== "cash-to-bank") throw new Error("Choose a valid transfer direction.");
+        amount = Number(amount);
+        if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid transfer amount.");
+        const historyId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const historyDoc = doc(db, "users", currentUser.uid, "balanceHistory", historyId);
+        const changedAt = new Date().toISOString();
+        return runTransaction(db, async transaction => {
+          const financeSnapshot = await transaction.get(financeRef());
+          const saved = financeSnapshot.exists() ? financeSnapshot.data() : {};
+          const previous = { bank: Number(saved.bank) || 0, cash: Number(saved.cash) || 0, invested: Number(investedTotal) || 0, roundUpDays: Number(saved.roundUpDays) || 15 };
+          const source = direction === "bank-to-cash" ? "bank" : "cash";
+          const destination = source === "bank" ? "cash" : "bank";
+          if (previous[source] < amount) throw new Error(`Not enough money in ${source === "bank" ? "your bank account" : "available cash"}.`);
+          const next = { ...previous, [source]: Number((previous[source] - amount).toFixed(2)), [destination]: Number((previous[destination] + amount).toFixed(2)) };
+          const total = previous.bank + previous.cash + previous.invested;
+          const usable = previous.bank + previous.cash;
+          const historyEntry = {
+            changedAt, previousTotal: total, totalChange: 0, newTotal: total,
+            previousBank: previous.bank, newBank: next.bank, previousCash: previous.cash, newCash: next.cash,
+            previousUsable: usable, usableChange: 0, newUsable: usable,
+            previousInvested: previous.invested, investedChange: 0, newInvested: previous.invested,
+            note: `Money transfer: ${source === "bank" ? "Bank account → Available cash" : "Available cash → Bank account"} (${amount})`
+          };
+          transaction.set(financeRef(), next);
+          transaction.set(historyDoc, historyEntry);
+          return { balances: next, historyEntry: { id: historyId, ...historyEntry }, amount, direction };
+        });
+      },
+      async addFundedInvestment(item, source, investedTotal) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (source !== "bank" && source !== "cash") throw new Error("Choose a bank account or available cash.");
+        const investmentDoc = doc(db, "users", currentUser.uid, "investments", String(item.id));
+        const historyId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const historyDoc = doc(db, "users", currentUser.uid, "balanceHistory", historyId);
+        const changedAt = new Date().toISOString();
+        return runTransaction(db, async transaction => {
+          const investmentSnapshot = await transaction.get(investmentDoc);
+          const financeSnapshot = await transaction.get(financeRef());
+          if (investmentSnapshot.exists()) throw new Error("This investment was already saved.");
+          const amount = Number(item.amount);
+          if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid investment amount.");
+          const saved = financeSnapshot.exists() ? financeSnapshot.data() : {};
+          const previous = { bank: Number(saved.bank) || 0, cash: Number(saved.cash) || 0, invested: Number(investedTotal) || 0, roundUpDays: Number(saved.roundUpDays) || 15 };
+          if (previous[source] < amount) throw new Error(`Not enough money in ${source === "bank" ? "your bank account" : "available cash"}. Choose Other source or edit your balance.`);
+          const newInvested = previous.invested + amount;
+          const next = { ...previous, [source]: Number((previous[source] - amount).toFixed(2)), invested: newInvested };
+          const previousTotal = previous.bank + previous.cash + previous.invested;
+          const newTotal = next.bank + next.cash + next.invested;
+          const previousUsable = previous.bank + previous.cash;
+          const newUsable = next.bank + next.cash;
+          const historyEntry = {
+            changedAt, previousTotal, totalChange: newTotal - previousTotal, newTotal,
+            previousBank: previous.bank, newBank: next.bank, previousCash: previous.cash, newCash: next.cash,
+            previousUsable, usableChange: newUsable - previousUsable, newUsable,
+            previousInvested: previous.invested, investedChange: amount, newInvested,
+            note: `New investment funded from ${source === "bank" ? "bank account" : "available cash"}: ${String(item.name || "Investment")}`
+          };
+          const { id, ...investmentData } = item;
+          transaction.set(investmentDoc, investmentData);
+          transaction.set(financeRef(), next);
+          transaction.set(historyDoc, historyEntry);
+          return { balances: next, historyEntry: { id: historyId, ...historyEntry }, investment: { ...item }, source, amount };
+        });
+      },
+      async saveExpectedMoney(item) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        const { id, ...data } = item;
+        await setDoc(doc(db, "users", currentUser.uid, "expectedMoney", String(id)), data);
+      },
+      async deleteExpectedMoney(id) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        await deleteDoc(doc(db, "users", currentUser.uid, "expectedMoney", String(id)));
+      },
+      async receiveExpectedMoney(id, source, investedTotal) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (source !== "bank" && source !== "cash") throw new Error("Choose a bank account or available cash.");
+        const expectedDoc = doc(db, "users", currentUser.uid, "expectedMoney", String(id));
+        const historyId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const historyDoc = doc(db, "users", currentUser.uid, "balanceHistory", historyId);
+        const changedAt = new Date().toISOString();
+        return runTransaction(db, async transaction => {
+          const expectedSnapshot = await transaction.get(expectedDoc);
+          const financeSnapshot = await transaction.get(financeRef());
+          if (!expectedSnapshot.exists()) throw new Error("This expected payment was already removed or received.");
+          const payment = expectedSnapshot.data();
+          const amount = Number(payment.amount);
+          if (!Number.isFinite(amount) || amount <= 0) throw new Error("This expected payment has an invalid amount.");
+          const saved = financeSnapshot.exists() ? financeSnapshot.data() : {};
+          const previous = { bank: Number(saved.bank) || 0, cash: Number(saved.cash) || 0, invested: Number(investedTotal) || 0, roundUpDays: Number(saved.roundUpDays) || 15 };
+          const next = { ...previous, [source]: Number((previous[source] + amount).toFixed(2)) };
+          const previousTotal = previous.bank + previous.cash + previous.invested;
+          const newTotal = next.bank + next.cash + next.invested;
+          const previousUsable = previous.bank + previous.cash;
+          const newUsable = next.bank + next.cash;
+          const historyEntry = {
+            changedAt, previousTotal, totalChange: newTotal - previousTotal, newTotal,
+            previousBank: previous.bank, newBank: next.bank, previousCash: previous.cash, newCash: next.cash,
+            previousUsable, usableChange: newUsable - previousUsable, newUsable,
+            previousInvested: previous.invested, investedChange: 0, newInvested: next.invested,
+            note: `Received expected money: ${String(payment.name || "Payment")}`
+          };
+          transaction.set(financeRef(), next);
+          transaction.delete(expectedDoc);
+          transaction.set(historyDoc, historyEntry);
+          return { balances: next, historyEntry: { id: historyId, ...historyEntry }, name: payment.name || "Payment", amount, source };
+        });
       },
       async payPlannedSpend(id, source, investedTotal) {
         if (!currentUser) throw new Error("Please sign in first.");
@@ -185,6 +297,19 @@ if (!isFirebaseConfigured) {
         });
         if (existing.size + items.length) await batch.commit();
       },
+      async replaceExpectedMoney(items) {
+        if (!currentUser) throw new Error("Please sign in first.");
+        if (items.length > 450) throw new Error("A maximum of 450 expected payments can be imported at once.");
+        const existing = await getDocs(expectedMoneyRef());
+        if (existing.size + items.length > 500) throw new Error("This import exceeds Firestore's 500-operation batch limit.");
+        const batch = writeBatch(db);
+        existing.forEach(snapshot => batch.delete(snapshot.ref));
+        items.forEach(item => {
+          const { id, ...data } = item;
+          batch.set(doc(db, "users", currentUser.uid, "expectedMoney", String(id)), data);
+        });
+        if (existing.size + items.length) await batch.commit();
+      },
       async replaceAll(items) {
         if (!currentUser) throw new Error("Please sign in first.");
         if (items.length > 450) throw new Error("A maximum of 450 investments can be saved at once.");
@@ -241,6 +366,7 @@ if (!isFirebaseConfigured) {
       if (unsubscribeFinance) { unsubscribeFinance(); unsubscribeFinance = null; }
       if (unsubscribeSpends) { unsubscribeSpends(); unsubscribeSpends = null; }
       if (unsubscribeBalanceHistory) { unsubscribeBalanceHistory(); unsubscribeBalanceHistory = null; }
+      if (unsubscribeExpectedMoney) { unsubscribeExpectedMoney(); unsubscribeExpectedMoney = null; }
       document.body.classList.toggle("signed-out", !user);
       document.getElementById("authPanel").classList.toggle("hidden", !!user);
       document.getElementById("accountEmail").textContent = user?.email || "";
@@ -248,7 +374,9 @@ if (!isFirebaseConfigured) {
         window.setCloudInvestments([]);
         currentBalances = { bank: 0, cash: 0, invested: 0 };
         currentSpends = [];
+        currentExpectedMoney = [];
         window.setFinanceData(currentBalances, currentSpends);
+        window.setExpectedMoney([]);
         window.setBalanceHistory([]);
         setStatus("Sign in to load your cloud-saved investments.");
         return;
@@ -262,6 +390,10 @@ if (!isFirebaseConfigured) {
         currentSpends = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
         window.setFinanceData(currentBalances, currentSpends);
       }, error => setStatus(`Could not load planned spends: ${error.message}`));
+      unsubscribeExpectedMoney = onSnapshot(expectedMoneyRef(), snapshot => {
+        currentExpectedMoney = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
+        window.setExpectedMoney(currentExpectedMoney);
+      }, error => window.setExpectedMoneyError?.(error.message));
       unsubscribeBalanceHistory = onSnapshot(balanceHistoryRef(), snapshot => {
         window.setBalanceHistory(snapshot.docs.map(item => ({ id: item.id, ...item.data() })));
       }, error => {
