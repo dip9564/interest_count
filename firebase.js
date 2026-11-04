@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { firebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
 
@@ -368,18 +368,87 @@ if (!isFirebaseConfigured) {
       }
     };
 
-    document.getElementById("authForm").addEventListener("submit", async event => {
+    let authMode = "login";
+    const authForm = document.getElementById("authForm");
+    const authEmailInput = document.getElementById("authEmail");
+    const authPasswordInput = document.getElementById("authPassword");
+    const authModeToggle = document.getElementById("authModeToggle");
+    const authHeading = document.getElementById("authHeading");
+    const authDescription = document.getElementById("authDescription");
+    const signInButton = document.getElementById("signInButton");
+    const forgotPasswordButton = document.getElementById("forgotPasswordButton");
+
+    authModeToggle.addEventListener("click", () => {
+      authMode = authMode === "login" ? "signup" : "login";
+      const isLogin = authMode === "login";
+      authHeading.textContent = isLogin ? "Sign in to your tracker" : "Create your Yield account";
+      authDescription.textContent = isLogin
+        ? "Welcome back. Log in to your personal tracker."
+        : "Create your personal finance tracker account.";
+      signInButton.textContent = isLogin ? "Login" : "Create account";
+      authModeToggle.textContent = isLogin ? "New user? Sign up" : "Already have an account? Log in";
+      forgotPasswordButton.classList.toggle("hidden", !isLogin);
+      authPasswordInput.autocomplete = isLogin ? "current-password" : "new-password";
+      document.getElementById("authStatus").textContent = "";
+    });
+
+    authForm.addEventListener("submit", async event => {
       event.preventDefault();
       try {
-        await signInWithEmailAndPassword(auth, document.getElementById("authEmail").value.trim(), document.getElementById("authPassword").value);
-      } catch (error) { setStatus(error.message); }
+        const email = authEmailInput.value.trim();
+        const password = authPasswordInput.value;
+        if (authMode === "signup") {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          await signInWithEmailAndPassword(auth, email, password);
+        }
+      } catch (error) {
+        const isCredentialError = authMode !== "signup" &&
+          ["auth/invalid-credential", "auth/wrong-password"].includes(error?.code);
+        setStatus(
+          isCredentialError
+            ? "Firebase: Error (auth/invalid-credential)."
+            : error?.message || String(error)
+        );
+      }
     });
-    document.getElementById("signUpButton").addEventListener("click", async () => {
-      const form = document.getElementById("authForm");
-      if (!form.reportValidity()) return;
+    const signInView = document.getElementById("signInView");
+    const resetPasswordView = document.getElementById("resetPasswordView");
+    const resetEmailInput = document.getElementById("resetEmail");
+    const resetPasswordStatus = document.getElementById("resetPasswordStatus");
+    document.getElementById("forgotPasswordButton").addEventListener("click", () => {
+      resetEmailInput.value = document.getElementById("authEmail").value.trim();
+      document.getElementById("authStatus").textContent = "";
+      resetPasswordStatus.textContent = "";
+      signInView.classList.add("hidden");
+      resetPasswordView.classList.remove("hidden");
+      resetEmailInput.focus();
+    });
+    document.getElementById("backToSignInButton").addEventListener("click", () => {
+      document.getElementById("authEmail").value = resetEmailInput.value.trim();
+      resetPasswordView.classList.add("hidden");
+      signInView.classList.remove("hidden");
+    });
+    document.getElementById("resetPasswordForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!resetEmailInput.reportValidity()) return;
+      const email = resetEmailInput.value.trim();
+      resetPasswordStatus.textContent = "Sending reset email…";
       try {
-        await createUserWithEmailAndPassword(auth, document.getElementById("authEmail").value.trim(), document.getElementById("authPassword").value);
-      } catch (error) { setStatus(error.message); }
+        await sendPasswordResetEmail(auth, email);
+        resetPasswordStatus.textContent = "Password reset email sent to your Gmail.";
+      } catch (error) {
+        const messages = {
+          "auth/invalid-email": "Enter a valid email address and try again.",
+          "auth/user-not-found": "This email address is not registered. Check it or create an account.",
+          "auth/too-many-requests": "Too many reset attempts. Wait a while, then try again.",
+          "auth/network-request-failed": "Could not reach Firebase. Check your internet connection and try again.",
+          "auth/unauthorized-continue-uri": "Firebase rejected the reset page URL. Add this website domain to Firebase Authentication authorized domains.",
+          "auth/operation-not-allowed": "Email/password authentication is disabled in Firebase Authentication.",
+          "auth/invalid-continue-uri": "The password reset URL is invalid. Check Firebase Authentication settings."
+        };
+        resetPasswordStatus.textContent = messages[error.code] || `Could not send the reset email (${error.code || "unknown error"}). Check Firebase Authentication settings and try again.`;
+      }
     });
     document.getElementById("signOutButton").addEventListener("click", () => signOut(auth));
 

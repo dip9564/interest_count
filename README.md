@@ -15,6 +15,10 @@ Static Vercel app backed by Firebase Authentication and Cloud Firestore. Investm
 
 Firebase web configuration is not a server secret. The security boundary is the published Firestore rules. Never put a Firebase Admin/service account key in this static app.
 
+## Password reset email troubleshooting
+
+The app calls Firebase Authentication's `sendPasswordResetEmail`. A resolved request means Firebase accepted it; it does not confirm inbox delivery. In Firebase Console, check **Authentication → Templates → Password reset** and verify the sender details. Confirm the destination address belongs to an Email/Password account in this project, then check spam/promotions and mail-provider filtering. If delivery still fails, review Firebase Authentication email delivery/project status. The hosting domain used by reset links must be listed under **Authentication → Settings → Authorized domains**.
+
 ## Data and free tier
 
 Investment records are saved at `users/{userId}/investments/{investmentId}`. Money balances are saved at `users/{userId}/finance/summary`, planned spends at `users/{userId}/spends/{spendId}`, and balance-change history at `users/{userId}/balanceHistory/{changeId}`. Firestore rules allow access only when the signed-in account ID matches `{userId}`. After adding these features, republish the updated rules from `firestore.rules` in Firebase Console → Firestore → Rules. Keep the Firebase project on Spark to use the no-cost quotas; if a Spark quota is exceeded, the affected service may be unavailable until its quota resets or the project is upgraded. Free quotas and terms can change, so check Firebase pricing from time to time.
