@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101914">
+<title>Yield · Group Expenses</title>
+<style>
+:root{color-scheme:dark;--bg:#101914;--panel:#18231c;--panel2:#151f19;--line:#2a3a30;--ink:#edf4ee;--muted:#91a096;--green:#86c99a;--blue:#8eb8ed;--blue-soft:#203448}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{width:min(1080px,calc(100% - 32px));margin:35px auto}.brand{font-weight:800;font-size:20px;letter-spacing:-.7px;margin-bottom:22px}.brand span{color:#9db5a2}
+.intro{padding:22px;border:1px solid #315066;border-radius:17px;background:linear-gradient(120deg,#192b32,#192b26);margin-bottom:18px}.eyebrow{font-size:10px;letter-spacing:1.3px;color:var(--green);font-weight:800}.intro h1{font-size:25px;margin:7px 0 5px}.intro p,.sub{color:#a8b6ad;font-size:12px;margin:0}
+.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(270px,.8fr);gap:16px;align-items:start}.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:19px;min-width:0}.card h2{font-size:15px;margin:0}.sub{margin:4px 0 15px;color:var(--muted)}
+.people,.payments,.transfers{display:grid;gap:9px}.person{display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:9px;align-items:center}.avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:var(--blue-soft);color:var(--blue);font-weight:750}
+input,select{width:100%;min-width:0;background:#131d18;border:1px solid #304038;border-radius:9px;padding:10px 11px;color:var(--ink);font:inherit;font-size:12px;outline:none}input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px #1b354466}
+.remove{border:0;background:transparent;color:#ff9c8f;border-radius:8px;font-size:19px;height:34px;cursor:pointer}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.btn{border:1px solid #34483d;border-radius:9px;padding:10px 13px;background:#202d24;color:var(--ink);font-weight:650;font-size:12px;cursor:pointer}.btn.primary{background:#244a36;border-color:#38674b;color:#c8f0d1}.btn:hover{filter:brightness(1.13)}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:22px 0 12px}.count{font-size:10px;color:var(--muted)}
+.payment-labels,.payment{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(105px,.9fr) minmax(95px,.8fr) 28px;gap:8px;align-items:center}.payment-labels{padding:0 9px 5px;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}.payment{padding:9px;background:var(--panel2);border:1px solid var(--line);border-radius:11px}.payment input,.payment select{font-size:11px;padding:9px 8px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px}.stat{padding:14px;background:var(--panel2);border:1px solid var(--line);border-radius:11px}.stat span{display:block;color:var(--muted);font-size:10px;margin-bottom:4px}.stat strong{font-size:19px;letter-spacing:-.5px}
+.results{margin-top:17px}.results h3{margin:20px 0 10px;font-size:14px}.table-wrap{overflow-x:auto}.table{width:100%;border-collapse:collapse;min-width:500px}.table th{font-size:9px;color:var(--muted);text-align:left;text-transform:uppercase;letter-spacing:.5px;padding:10px 8px;border-bottom:1px solid var(--line)}.table td{font-size:11px;padding:12px 8px;border-bottom:1px solid var(--line)}.table tr:last-child td{border-bottom:0}
+.positive{color:var(--green);font-weight:750}.negative{color:#ff9c8f;font-weight:750}.neutral{color:var(--muted)}.transfer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;font-size:12px}.transfer-amount{white-space:nowrap;color:var(--green);font-weight:750}.empty{padding:18px;text-align:center;color:var(--muted);background:var(--panel2);border:1px dashed #34483d;border-radius:10px;font-size:11px}.status{font-size:10px;color:var(--green);align-self:center}
+@media(max-width:850px){.grid{grid-template-columns:1fr}}@media(max-width:600px){.wrap{margin:18px auto;width:calc(100% - 22px)}.card{padding:14px}.intro{padding:17px}.payment-labels{display:none}.payment{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 30px;gap:7px}.payment [data-desc]{grid-column:1/-1}.payment [data-payer]{grid-column:1/2}.payment .amount-wrap{grid-column:2/3}.payment [data-remove-payment]{grid-column:3/4;grid-row:2}.payment input,.payment select{min-height:41px;font-size:12px}.actions .btn{flex:1}.stats{gap:8px}.stat{padding:12px}.stat strong{font-size:17px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="brand">yield<span>.</span></div>
+  <header class="intro"><div class="eyebrow">YIELD · GROUP EXPENSES</div><h1>Split group expenses fairly.</h1><p>Add each payment separately, choose who paid, and see everyone's total contribution and the simplest way to settle up.</p></header>
+  <div class="grid">
+    <section class="card">
+      <div class="section-head" style="margin-top:0"><div><h2>1. Group members</h2><p class="sub">Add everyone sharing the expenses.</p></div><span class="count" id="peopleCount">0 people</span></div>
+      <div class="people" id="peopleList"></div>
+      <div class="actions"><button class="btn" id="addPerson" type="button">＋ Add person</button></div>
+      <div class="section-head"><div><h2>2. Individual payments</h2><p class="sub">Add one row for every payment, such as cab, train, food or hotel.</p></div><span class="count" id="paymentCount">0 payments</span></div>
+      <div class="payment-labels"><span>Expense name</span><span>Paid by</span><span>Amount (₹)</span><span></span></div>
+      <div class="payments" id="paymentList"></div>
+      <div class="actions"><button class="btn" id="addPayment" type="button">＋ Add payment</button><button class="btn primary" id="calculate" type="button">Calculate settlement ↓</button></div>
+      <p class="sub" style="margin-top:12px">Each expense is split equally among all group members.</p>
+    </section>
+    <section class="card">
+      <h2>Live spending overview</h2><p class="sub">Automatically adds every payment made by each person.</p>
+      <div class="stats"><div class="stat"><span>Total group spending</span><strong id="liveTotal">₹0.00</strong></div><div class="stat"><span>Equal share per person</span><strong id="liveShare">₹0.00</strong></div></div>
+      <div class="results" id="settlement"><div class="empty">Add group members and payments to calculate the settlement.</div></div>
+      <div class="actions"><button class="btn" id="copy" type="button">Copy settlement</button><span class="status" id="copyStatus" aria-live="polite"></span></div>
+    </section>
+  </div>
+</main>
+<script>
+let people=[],payments=[];
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=value=>'₹'+Math.abs(Number(value)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+function totals(){const paid=people.map(()=>0);payments.forEach(p=>{const i=Number(p.payer),v=Math.max(0,Number(p.amount)||0);if(paid[i]!==undefined)paid[i]+=v});const total=paid.reduce((a,b)=>a+b,0);return{paid,total,share:people.length?total/people.length:0}}
+function renderPeople(){
+ $('peopleList').innerHTML=people.map((name,i)=>`<div class="person"><span class="avatar">${esc((name.trim()[0]||'?').toUpperCase())}</span><input data-person="${i}" aria-label="Person ${i+1} name" placeholder="Person name" value="${esc(name)}"><button class="remove" type="button" data-remove-person="${i}" aria-label="Remove person">×</button></div>`).join('');
+ $('peopleCount').textContent=`${people.length} people`;
+ document.querySelectorAll('[data-person]').forEach(input=>input.oninput=e=>{people[+e.target.dataset.person]=e.target.value;renderPayments();renderSummary()});
+ document.querySelectorAll('[data-remove-person]').forEach(button=>button.onclick=()=>{if(people.length<=1){alert('Keep at least one group member.');return}const i=+button.dataset.removePerson;people.splice(i,1);payments=payments.filter(p=>+p.payer!==i).map(p=>({...p,payer:+p.payer>i?+p.payer-1:+p.payer}));renderAll()});
+}
+function renderPayments(){
+ $('paymentList').innerHTML=payments.map((p,i)=>`<div class="payment"><input data-desc="${i}" aria-label="Expense name" placeholder="e.g. Cab fare" value="${esc(p.desc)}"><select data-payer="${i}" aria-label="Who paid">${people.map((name,j)=>`<option value="${j}" ${+p.payer===j?'selected':''}>${esc(name.trim()||'Person '+(j+1))}</option>`).join('')}</select><div class="amount-wrap" style="position:relative"><span style="position:absolute;left:9px;top:9px;color:#91a096;font-size:11px">₹</span><input style="padding-left:24px" type="number" min="0" step="0.01" inputmode="decimal" data-amount="${i}" aria-label="Amount paid" placeholder="0.00" value="${Number(p.amount)||''}"></div><button class="remove" type="button" data-remove-payment="${i}" aria-label="Remove payment">×</button></div>`).join('');
+ $('paymentCount').textContent=`${payments.length} payments`;
+ document.querySelectorAll('[data-desc]').forEach(input=>input.oninput=e=>{payments[+e.target.dataset.desc].desc=e.target.value});
+ document.querySelectorAll('[data-payer]').forEach(input=>input.onchange=e=>{payments[+e.target.dataset.payer].payer=+e.target.value;renderSummary()});
+ document.querySelectorAll('[data-amount]').forEach(input=>input.oninput=e=>{payments[+e.target.dataset.amount].amount=Math.max(0,+e.target.value||0);renderSummary()});
+ document.querySelectorAll('[data-remove-payment]').forEach(button=>button.onclick=()=>{payments.splice(+button.dataset.removePayment,1);renderAll()});
+}
+function renderSummary(){
+ const t=totals();$('liveTotal').textContent=money(t.total);$('liveShare').textContent=money(t.share);
+ if(!people.length){$('settlement').innerHTML='<div class="empty">Add at least one person.</div>';return}
+ const rows=people.map((name,i)=>({name:name.trim()||`Person ${i+1}`,paid:t.paid[i],balance:t.paid[i]-t.share}));
+ let debtors=rows.filter(x=>x.balance<-.005).map(x=>({name:x.name,amount:-x.balance})),creditors=rows.filter(x=>x.balance>.005).map(x=>({name:x.name,amount:x.balance})),transfers=[],i=0,j=0;
+ while(i<debtors.length&&j<creditors.length){const amount=Math.min(debtors[i].amount,creditors[j].amount);if(amount>.005)transfers.push({from:debtors[i].name,to:creditors[j].name,amount});debtors[i].amount-=amount;creditors[j].amount-=amount;if(debtors[i].amount<.005)i++;if(creditors[j].amount<.005)j++}
+ const table=rows.map(x=>{const pos=x.balance>.005,neg=x.balance<-.005,cls=pos?'positive':neg?'negative':'neutral',status=pos?'Gets back':neg?'Needs to pay':'Settled';return `<tr><td><strong>${esc(x.name)}</strong></td><td>${money(x.paid)}</td><td>${money(t.share)}</td><td class="${cls}">${pos?'+':neg?'−':''}${money(x.balance)}</td><td class="${cls}">${status}</td></tr>`}).join('');
+ const transferHtml=transfers.length?transfers.map(x=>`<div class="transfer"><span><strong>${esc(x.from)}</strong> pays <strong>${esc(x.to)}</strong></span><span class="transfer-amount">${money(x.amount)}</span></div>`).join(''):'<div class="empty">Everyone is settled. No payments needed 🎉</div>';
+ $('settlement').innerHTML=`<h3>Individual balances</h3><div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Paid</th><th>Share</th><th>Balance</th><th>Status</th></tr></thead><tbody>${table}</tbody></table></div><h3>Who pays whom?</h3><div class="transfers">${transferHtml}</div>`;
+ window.settlementText=`GROUP EXPENSE SETTLEMENT\nTotal spent: ${money(t.total)}\nEqual share: ${money(t.share)} per person\n\nINDIVIDUAL BALANCES\n${rows.map(x=>`${x.name}: paid ${money(x.paid)}, share ${money(t.share)}, balance ${(x.balance>=0?'+':'−')+money(x.balance)} (${x.balance>.005?'gets back':x.balance<-.005?'needs to pay':'settled'})`).join('\n')}\n\nEXPENSES\n${payments.map(p=>`${p.desc||'Expense'}: ${people[+p.payer]||'Unknown'} paid ${money(p.amount)}`).join('\n')}\n\nSETTLEMENT\n${transfers.length?transfers.map(x=>`${x.from} pays ${x.to} ${money(x.amount)}`).join('\n'):'No payments needed'}`;
+}
+function renderAll(){renderPeople();renderPayments();renderSummary()}
+$('addPerson').onclick=()=>{people.push('');renderAll()};
+$('addPayment').onclick=()=>{payments.push({desc:'',payer:0,amount:0});renderAll()};
+$('calculate').onclick=()=>{$('settlement').scrollIntoView({behavior:'smooth',block:'nearest'})};
+$('copy').onclick=async()=>{renderSummary();try{await navigator.clipboard.writeText(window.settlementText||'');$('copyStatus').textContent='Copied!';setTimeout(()=>$('copyStatus').textContent='',1800)}catch(e){$('copyStatus').textContent='Clipboard unavailable'}};
+$('reset').onclick=()=>{if(!confirm('Start a fresh group? All current members and payments will be cleared.'))return;people=[];payments=[];window.settlementText='GROUP EXPENSES\nNo members or payments.';renderAll();$('copyStatus').textContent='Ready for a new group';};
+renderAll();
+</script>
+</body>
+</html>
