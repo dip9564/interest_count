@@ -41,7 +41,7 @@ input,select{width:100%;min-width:0;background:#131d18;border:1px solid #304038;
       <h2>Live spending overview</h2><p class="sub">Automatically adds every payment made by each person.</p>
       <div class="stats"><div class="stat"><span>Total group spending</span><strong id="liveTotal">₹0.00</strong></div><div class="stat"><span>Equal share per person</span><strong id="liveShare">₹0.00</strong></div></div>
       <div class="results" id="settlement"><div class="empty">Add group members and payments to calculate the settlement.</div></div>
-      <div class="actions"><button class="btn" id="copy" type="button">Copy settlement</button><span class="status" id="copyStatus" aria-live="polite"></span></div>
+      <div class="actions"><button class="btn" id="copy" type="button">Copy settlement</button><button class="btn" id="reset" type="button">Reset example</button><span class="status" id="copyStatus" aria-live="polite"></span></div>
     </section>
   </div>
 </main>
@@ -74,7 +74,10 @@ function renderSummary(){
  const table=rows.map(x=>{const pos=x.balance>.005,neg=x.balance<-.005,cls=pos?'positive':neg?'negative':'neutral',status=pos?'Gets back':neg?'Needs to pay':'Settled';return `<tr><td><strong>${esc(x.name)}</strong></td><td>${money(x.paid)}</td><td>${money(t.share)}</td><td class="${cls}">${pos?'+':neg?'−':''}${money(x.balance)}</td><td class="${cls}">${status}</td></tr>`}).join('');
  const transferHtml=transfers.length?transfers.map(x=>`<div class="transfer"><span><strong>${esc(x.from)}</strong> pays <strong>${esc(x.to)}</strong></span><span class="transfer-amount">${money(x.amount)}</span></div>`).join(''):'<div class="empty">Everyone is settled. No payments needed 🎉</div>';
  $('settlement').innerHTML=`<h3>Individual balances</h3><div class="table-wrap"><table class="table"><thead><tr><th>Person</th><th>Paid</th><th>Share</th><th>Balance</th><th>Status</th></tr></thead><tbody>${table}</tbody></table></div><h3>Who pays whom?</h3><div class="transfers">${transferHtml}</div>`;
- window.settlementText=`GROUP EXPENSE SETTLEMENT\nTotal spent: ${money(t.total)}\nEqual share: ${money(t.share)} per person\n\nINDIVIDUAL BALANCES\n${rows.map(x=>`${x.name}: paid ${money(x.paid)}, share ${money(t.share)}, balance ${(x.balance>=0?'+':'−')+money(x.balance)} (${x.balance>.005?'gets back':x.balance<-.005?'needs to pay':'settled'})`).join('\n')}\n\nEXPENSES\n${payments.map(p=>`${p.desc||'Expense'}: ${people[+p.payer]||'Unknown'} paid ${money(p.amount)}`).join('\n')}\n\nSETTLEMENT\n${transfers.length?transfers.map(x=>`${x.from} pays ${x.to} ${money(x.amount)}`).join('\n'):'No payments needed'}`;
+ const paymentLines=payments.length
+   ? payments.map((p,index)=>`${index+1}. ${p.desc?.trim()||'Unnamed expense'} | Paid by: ${people[+p.payer]||'Unknown'} | Amount: ${money(p.amount)}`).join('\n')
+   : 'No individual payments added.';
+  window.settlementText=`GROUP EXPENSE SETTLEMENT\nTotal spent: ${money(t.total)}\nEqual share: ${money(t.share)} per person\n\nINDIVIDUAL PAYMENTS (INPUTS)\n${paymentLines}\n\nINDIVIDUAL BALANCES\n${rows.length?rows.map(x=>`${x.name}: paid ${money(x.paid)}, share ${money(t.share)}, balance ${(x.balance>=0?'+':'−')+money(x.balance)} (${x.balance>.005?'gets back':x.balance<-.005?'needs to pay':'settled'})`).join('\n'):'No group members added.'}\n\nSETTLEMENT\n${transfers.length?transfers.map(x=>`${x.from} pays ${x.to} ${money(x.amount)}`).join('\n'):'No payments needed'}`;
 }
 function renderAll(){renderPeople();renderPayments();renderSummary()}
 $('addPerson').onclick=()=>{people.push('');renderAll()};
